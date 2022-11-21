@@ -16,6 +16,7 @@ from DyGCN.utils import set_seed, Namespace, plot_train_loss
 
 def parse():
     parser=argparse.ArgumentParser()
+    parser.add_argument('--mode',default='train', type=str)
     parser.add_argument('--ck_path',default='DyGCN/savedmodel/model.pt', type=str)
     parser.add_argument('--embs_path', default='DyGCN/data/graph_embs.pt',type=str)
     parser.add_argument('--dataset', default='data/cic2017', type=str)
@@ -42,12 +43,14 @@ if __name__ =='__main__':
     ip_lens=[len(ips) for ips in data.ip_list]
     print("平均每张图包含的节点数目", sum(ip_lens)/len(ip_lens))
 
-    t0=time()
-    losses=train_gcn_lstm5(args, data, epochs=1, train_len=[0, 529]) # cic[0,529], unsw[200:600], ustc[10:100]
-    plot_train_loss(losses)
-    t1=time()
-    print('DyGCN 训练时间：', t1-t0)
-
-    predict5(args, data)
-    print('DyGCN 测试时间：', time()-t1)
+    if args.mode=='train':
+        t0=time()
+        losses=train_gcn_lstm5(args, data, epochs=1, train_len=[0, 529]) # cic[0,529], unsw[200:600], ustc[10:100]
+        plot_train_loss(losses)
+        t1=time()
+        print('DyGCN 训练时间：', t1-t0)
+    else:
+        t0=time()
+        predict5(args, data)
+        print('DyGCN 测试时间：', time()-t1)
     
