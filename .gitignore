@@ -1,0 +1,11 @@
+data/
+compare_models/CTGCN/data
+compare_models/DyDGI/data
+compare_models/DySAT
+compare_models/Evolve_GCN/data
+compare_models/GCN/data
+compare_models/GCN_LSTM/data
+DyGCN/data
+nohuptxt/
+HAE/
+evaluate/
