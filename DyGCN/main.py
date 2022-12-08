@@ -38,6 +38,7 @@ if __name__ =='__main__':
     # 读取数据
     dataset = Dataset(args, os.path.join('DyGCN/data/', args.dataset))
     data=dataset.gen_graphs()
+    dataset.degree_adj()
     data=Namespace(data)
 
     ip_lens=[len(ips) for ips in data.ip_list]

@@ -26,7 +26,7 @@ class Dataset():
         self.feat_file=os.path.join(save_path, 'feats.npy')
         self.label_types_file=os.path.join(save_path, 'label_types.npy')
         self.label_file=os.path.join(save_path, 'labels.npy')
-        
+    
     def normalize_random(self,adj):
         """邻接矩阵归一化：随机游走归一化"""
         # adj = sp.coo_matrix(adj)
@@ -69,11 +69,11 @@ class Dataset():
             
             ips = le.fit_transform(edges.reshape(-1))
             self.ip_list.append(le.classes_.tolist())
-            ips=ips.reshape(-1,2)
+            edges=ips.reshape(-1,2)
             n = len(le.classes_)
-            A_out = torch.sparse_coo_tensor([ips[:,0],range(FLOW_NUM)], torch.ones(FLOW_NUM), size=[n, FLOW_NUM])
-            A_in = torch.sparse_coo_tensor([ips[:,1],range(FLOW_NUM)], torch.ones(FLOW_NUM), size=[n, FLOW_NUM])
-            adj = torch.sparse_coo_tensor(ips.T, torch.ones(FLOW_NUM),size=[n, n])
+            A_out = torch.sparse_coo_tensor([edges[:,0],range(FLOW_NUM)], torch.ones(FLOW_NUM), size=[n, FLOW_NUM])
+            A_in = torch.sparse_coo_tensor([edges[:,1],range(FLOW_NUM)], torch.ones(FLOW_NUM), size=[n, FLOW_NUM])
+            adj = torch.sparse_coo_tensor(edges.T, torch.ones(FLOW_NUM),size=[n, n])
             self.A_list.append(adj)
             adj = self.normalize_sym(torch.eye(adj.shape[0])+adj)
             A_out=self.normalize_random(A_out.to_dense())
@@ -93,6 +93,18 @@ class Dataset():
             'feat_list':self.feat_list,
             'ip_list': self.ip_list
         }
+
+    
+    def degree_adj(self, type='out'):
+       
+        self.D_adjs=[]
+        if type =='out':  # 出度权重
+            self.D_adjs=self.adj_list
+        elif type=='in': # 入度权重
+            for out_adj in self.A_list:
+                in_adj = out_adj.T
+                self.D_adjs.append(self.normalize_sym(in_adj))
+        return self.D_adjs
 
 
     def process_cic2017(self):

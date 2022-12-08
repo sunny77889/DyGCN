@@ -42,7 +42,7 @@ def train_gcn_lstm5(args, data, epochs, train_len):
 
             cur_ips = data.ip_list[i+seq_len-1] # 当前时刻的图
             cur_A=data.A_list[i+seq_len-1] # 归一化前的IP邻接矩阵（当前时刻）
-
+            
             node_feats = model(x, Ain, Aout, adj, ips, cur_ips)
             edge_embs, labels, _ = get_edge_embs(node_feats, cur_A, abalation=True) # 边的正负采样
             pred= cls(edge_embs) # 基于分类器计算边的异常分数
@@ -83,7 +83,7 @@ def predict5(args,data):
         ips = data.ip_list[i: i+seq_len]
         cur_ips = data.ip_list[i]
         cur_A=data.A_list[i]
-        output = model(x, A_in,A_out, adj, ips,cur_ips)
+        output = model(x, A_in, A_out, adj, ips,cur_ips)
         edge_embs, labels, pos_edges = get_edge_embs(output, cur_A)
         pred=cls(pos_edges)
         pred = softmax(pred,0)

@@ -18,10 +18,12 @@ class DGCN3(nn.Module):
         super(DGCN3, self).__init__()
         self.args=args
         self.gc1 = GraphConvolution(args.in_dim, args.hid_dim) # 聚合出边特征
-        self.gc2 = GraphConvolution(args.in_dim, args.hid_dim)#聚合入边特征
+        self.gc2 = GraphConvolution(args.in_dim, args.hid_dim) #聚合入边特征
+        self.gc3 = GraphConvolution(args.in_dim, args.hid_dim) #出度权重图
         self.lstm=nn.LSTM(input_size=args.hid_dim*2, hidden_size=args.out_dim) #学习节点的时序性
         self.dropout = 0.5
         self.ln=nn.LayerNorm(args.hid_dim*2)
+        
     def node_history(self, ips, cur_ips, output):
         '''根据当前时刻的节点集cur_ips,获取历史i时刻节点的属性'''
         idx1 = np.where(np.in1d(ips, cur_ips))[0]
@@ -44,6 +46,8 @@ class DGCN3(nn.Module):
             x, Ain, Aout, Adj = x_list[i], Ain_list[i], Aout_list[i], A_list[i]
             node_in= F.relu(self.gc1(x, Ain))# 聚合节点的入边特征
             node_out =F.relu(self.gc2(x, Aout))# 聚合节点的出边特征
+            
+
             node_feat=torch.cat((node_in, node_out),1) # 拼接节点的入边特征-出边特征作为节点的聚合特征
             node_feat = F.dropout(node_feat, 0.5)
             node_feat=self.ln(node_feat)
