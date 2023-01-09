@@ -54,7 +54,8 @@ if __name__ =='__main__':
     args=parse()
     seq_len=5
     dataset=args.dataset
-    embs_path = os.path.join('data', dataset, "graph_embs.pt")
+    # embs_path = os.path.join('data', dataset, "graph_embs.pt")
+    embs_path='data/cic2018/graph_embs_struct_degree.pt'
     labels_path = os.path.join('data', dataset, "labels.npy")
     if dataset=='cic2017':
         train_len=[0, 529]
@@ -66,15 +67,15 @@ if __name__ =='__main__':
     labels=labels[seq_len:]
     labels=np.concatenate((labels[:train_len[0]], labels[train_len[1]:]))
     
-    # iof = IsolationForest()
-    iof = OneClassSVM()
+    iof = IsolationForest()
+    # iof = OneClassSVM()
     iof=iof.fit(data_embs[train_len[0]+seq_len:train_len[1]])
     test_embs=np.concatenate([data_embs[:train_len[0]],data_embs[train_len[1]:]])
     scores=iof.decision_function(test_embs) #值越低越不正常
     aucv, pre, rec, f1=matrix(labels.astype(np.long), -scores)
     
     
-    # # np.save(dataset+'scores.npy', -scores)
+    # np.save(dataset+'scores.npy', -scores)    
     # pred = torch.zeros(len(scores))
     # idx=scores.argsort()#从大到小
 

@@ -6,6 +6,7 @@ compare_models/Evolve_GCN/data
 compare_models/GCN/data
 compare_models/GCN_LSTM/data
 DyGCN/data
+DyGCN/savedmodel
 nohuptxt/
 HAE/
 evaluate/

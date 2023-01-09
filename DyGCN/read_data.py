@@ -9,6 +9,8 @@ import pandas as pd
 import torch
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from tqdm import tqdm
+import networkx as nx
+import matplotlib.pyplot as plt
 
 FLOW_NUM=1000 # 每个通信图中包含的流的数目
 
@@ -20,6 +22,7 @@ class Dataset():
         self.Aout_list=[]
         self.A_list=[]
         self.ip_list=[] # 每个图的ip
+        self.node_feats={} # 随机生成的节点特征
         self.dataset=args.dataset
 
         self.edge_file=os.path.join(save_path, 'edges.npy')
@@ -46,6 +49,11 @@ class Dataset():
         d_mat_inv_sqrt = torch.diag(torch.from_numpy(d_inv_sqrt))
         adj=torch.mm(d_mat_inv_sqrt, adj)
         return torch.mm(adj, d_mat_inv_sqrt)
+    
+    def gen_node_feats(self, ips):
+        for ip in ips:
+            if ip not in self.node_feats:
+                self.node_feats[ip]=torch.randn(77)
 
     def gen_graphs(self):
         dataset_name=self.dataset.split('/')[-1]
@@ -65,10 +73,18 @@ class Dataset():
         for i in tqdm(range(len(self.edges))):
             e = self.edges[i]
             edges = e[:,:2] #源IP，目的IP
+            cc=dict(Counter(edges[:,0]))
+            
             labels = e[:, 2].astype(np.long)
             
             ips = le.fit_transform(edges.reshape(-1))
+            t='205.174.165.73'
+            if t in cc and cc[t]==72:
+                print(i)
+                print(le.transform([t]))
             self.ip_list.append(le.classes_.tolist())
+            self.gen_node_feats(le.classes_.tolist()) # 为当前IP生成节点特征
+            
             edges=ips.reshape(-1,2)
             n = len(le.classes_)
             A_out = torch.sparse_coo_tensor([edges[:,0],range(FLOW_NUM)], torch.ones(FLOW_NUM), size=[n, FLOW_NUM])
@@ -85,26 +101,64 @@ class Dataset():
         
         # df = pd.DataFrame({'types':np.array(mal_types)[idx].tolist(),'num':np.array(mal_num)[idx].astype(int).tolist()}) 
         # print(df.groupby('types').agg('num'))
+        self.degree_adj()
         return {
             'Ain_list':self.Ain_list,
             'Aout_list': self.Aout_list,
             'A_list':self.A_list,
             'adj_list':self.adj_list,
             'feat_list':self.feat_list,
-            'ip_list': self.ip_list
+            'ip_list': self.ip_list,
+            'node_feats': self.node_feats,
+            'struct_adj':self.S_adjs
         }
 
     
     def degree_adj(self, type='out'):
-       
-        self.D_adjs=[]
-        if type =='out':  # 出度权重
-            self.D_adjs=self.adj_list
-        elif type=='in': # 入度权重
-            for out_adj in self.A_list:
-                in_adj = out_adj.T
-                self.D_adjs.append(self.normalize_sym(in_adj))
-        return self.D_adjs
+        # 事实证明 入度中心性的效果最好
+        self.S_adjs=[]
+        for adj in self.A_list:
+            adj=torch.eye(adj.shape[0])+adj.to_dense()
+            adj[adj>1]=1
+            if type=='out':
+                degrees=adj.sum(1)
+            elif type=='in':
+                degrees=adj.sum(0)
+            elif type=='out_weight':
+                degrees=adj.sum(1)/torch.sum(adj)
+            elif type=='in_weight':
+                degrees=adj.sum(0)/torch.sum(adj)
+            elif type=='out_centrality':
+                degrees=adj.sum(1)/adj.shape[0]
+            elif type=='in_centrality':
+                degrees=adj.sum(0)/adj.shape[0]
+            elif type=='degree':
+                degrees=1/(1+abs(adj.sum(0)-adj.sum(1)))
+            
+            
+            adj = torch.mul(adj, degrees)
+            self.S_adjs.append(self.normalize_sym(adj))
+        return self.S_adjs
+
+    def struct_feture_adj(self, type='betweenness_centrality'):
+        self.S_adjs=[]
+        i=0
+        for adj in self.A_list:
+            adj=torch.eye(adj.shape[0])+adj.to_dense()
+            adj[adj>1]=1
+            G=nx.from_numpy_array(adj.numpy())
+            score = nx.betweenness_centrality(G)
+            feas=list(score.values())
+            adj = torch.mul(adj, torch.Tensor(feas))
+            self.S_adjs.append(self.normalize_sym(adj))
+            if i==2746:
+                sg=nx.from_numpy_array(adj.numpy())
+                nx.draw(sg, with_labels=sg.nodes)
+                plt.savefig('nx.png')
+                print(score)
+            i+=1
+        return self.S_adjs
+
 
 
     def process_cic2017(self):

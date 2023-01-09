@@ -1,6 +1,3 @@
-from operator import truediv
-from turtle import forward
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,7 +5,7 @@ import torch.nn.functional as F
 from torch.nn.modules.activation import Tanh
 from torch.nn.parameter import Parameter
 from torch.utils.data import dataset
-
+from torch.nn.functional import softmax
 import DyGCN.utils as u
 from DyGCN.layers import GraphConvolution, GraphConvolution2, GraphConvolution3
 
@@ -17,22 +14,24 @@ class DGCN3(nn.Module):
     def __init__(self, args):
         super(DGCN3, self).__init__()
         self.args=args
-        self.gc1 = GraphConvolution(args.in_dim, args.hid_dim) # 聚合出边特征
-        self.gc2 = GraphConvolution(args.in_dim, args.hid_dim) #聚合入边特征
-        self.gc3 = GraphConvolution(args.in_dim, args.hid_dim) #出度权重图
-        self.lstm=nn.LSTM(input_size=args.hid_dim*2, hidden_size=args.out_dim) #学习节点的时序性
+        self.gc1 = GraphConvolution(args.in_dim, args.out_dim) # 聚合出边特征
+        self.gc2 = GraphConvolution(args.in_dim, args.out_dim) # 聚合入边特征
+        self.gc3 = GraphConvolution(args.in_dim, args.out_dim) # 边权重为结构特征的图
+        # self.gc4 = GraphConvolution(args.in_dim, args.hid_dim) # 流-k近邻图
+        
+        self.lstm=nn.LSTM(input_size=args.hid_dim, hidden_size=args.out_dim ) #学习节点的时序性
         self.dropout = 0.5
-        self.ln=nn.LayerNorm(args.hid_dim*2)
+        self.ln=nn.LayerNorm(args.hid_dim)
         
     def node_history(self, ips, cur_ips, output):
         '''根据当前时刻的节点集cur_ips,获取历史i时刻节点的属性'''
         idx1 = np.where(np.in1d(ips, cur_ips))[0]
         idx2 = np.where(np.in1d(cur_ips, ips))[0]
-        aa = torch.zeros(len(cur_ips), self.args.hid_dim*2).to(output.device)
+        aa = torch.zeros(len(cur_ips), self.args.hid_dim).to(output.device)
         aa[idx2]=output[idx1]
         return aa.unsqueeze(0)
 
-    def forward(self, x_list, Ain_list, Aout_list,A_list, ips_list, cur_ips):
+    def forward(self, x_list, Ain_list, Aout_list,A_list, ips_list, cur_ips, node_X, struct_adj):
         '''
         x_list: 边的特征向量
         Ain_list: 入向邻接矩阵
@@ -42,18 +41,25 @@ class DGCN3(nn.Module):
         cur_ips: 当前时刻节点集
         '''
         seqs=[]
+        struct_weight=[]
         for i in range(len(Ain_list)):
             x, Ain, Aout, Adj = x_list[i], Ain_list[i], Aout_list[i], A_list[i]
-            node_in= F.relu(self.gc1(x, Ain))# 聚合节点的入边特征
-            node_out =F.relu(self.gc2(x, Aout))# 聚合节点的出边特征
+            node_in= self.gc1(x, Ain) # 聚合节点的入边特征
+            node_out = self.gc2(x, Aout) # 聚合节点的出边特征
+            # struct_x = self.gc3(node_X[i].to(x.device), struct_adj[i].to(x.device))
             
+            # node_feat=torch.stack((node_in, node_out, struct_x), 0)
+            # alpha_x=softmax(node_feat) # 输出不同类型节点特征的权重
+            # node_feat=alpha_x*node_feat
+            # node_feat=torch.sum(node_feat, 0) # 加权和
 
             node_feat=torch.cat((node_in, node_out),1) # 拼接节点的入边特征-出边特征作为节点的聚合特征
             node_feat = F.dropout(node_feat, 0.5)
-            node_feat=self.ln(node_feat)
+            # node_feat=self.ln(node_feat)
             seqs.append(self.node_history(ips_list[i], cur_ips, node_feat))
         seqs=torch.vstack(seqs)
         output, _ =self.lstm(seqs) # 学习节点的时序
+        # flow_knn_output=self.gc4(x, flow_knn_adj.to(x.device))
         return output[-1]
 
 class DGCN2(nn.Module):
@@ -68,7 +74,7 @@ class DGCN2(nn.Module):
         '''根据当前时刻的节点集cur_ips,获取历史i时刻节点的属性'''
         idx1 = np.where(np.in1d(ips, cur_ips))[0]
         idx2 = np.where(np.in1d(cur_ips, ips))[0]
-        aa = torch.zeros(len(cur_ips),64)
+        aa = torch.zeros(len(cur_ips),32)
         aa[idx2]=output[idx1]
         return aa.unsqueeze(0)
     def forward(self, x_list, ifa_list, adj_list, ips_list, cur_ips):
@@ -114,9 +120,9 @@ class Classifier(torch.nn.Module):
     def __init__(self,indim,out_features=2):
         super(Classifier,self).__init__()
         activation = torch.nn.ReLU()
-        self.mlp = torch.nn.Sequential(torch.nn.Linear(in_features = indim, out_features =8),
+        self.mlp = torch.nn.Sequential(torch.nn.Linear(in_features = indim, out_features =16),
                                        activation,
-                                       torch.nn.Linear(in_features =8,out_features = out_features))
+                                       torch.nn.Linear(in_features =16,out_features = out_features))
 
     def forward(self,x):
         return self.mlp(x)

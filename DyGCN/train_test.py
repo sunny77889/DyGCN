@@ -16,6 +16,29 @@ from DyGCN.models import DGCN, DGCN2, DGCN3, LSTM_AE, AutoEncoder, Classifier
 from DyGCN.utils import FlowDataset, eval, get_edge_embs
 
 
+def model_forward(data, i, seq_len, device, model, abalation):
+    x = data.feat_list[i: i+seq_len]
+    # if device=='cpu':
+    x = th.FloatTensor(x).to(device)
+    # else:
+        # x = th.FloatTensor(x)
+
+    Ain = data.Ain_list[i: i+seq_len] # 目的IP-边: 入边有向图
+    Aout = data.Aout_list[i: i+seq_len] # 源IP-边: 出边有向图
+    adj = data.adj_list[i: i+seq_len] # 源IP-目的IP: 无向图
+    ips = data.ip_list[i: i+seq_len] # 节点集
+    node_X=[]
+    for ip_list in ips:
+        cur_node_X=[data.node_feats[ip] for ip in ip_list]
+        node_X.append(torch.stack(cur_node_X))
+
+    cur_ips = data.ip_list[i+seq_len-1] # 当前时刻的图
+    cur_A=data.A_list[i+seq_len-1] # 归一化前的IP邻接矩阵（当前时刻）
+    
+    node_feats = model(x, Ain, Aout, adj, ips, cur_ips, node_X, data.struct_adj[i: i+seq_len])
+    edge_embs, labels, pose_edges = get_edge_embs(node_feats, cur_A, abalation=abalation) # 边的正负采样
+    return labels, edge_embs, pose_edges
+
 # LSTM 学习节点的时序性，若干个时刻的节点集作为一个序列
 def train_gcn_lstm5(args, data, epochs, train_len):
     device=args.device
@@ -33,20 +56,10 @@ def train_gcn_lstm5(args, data, epochs, train_len):
         for i in tqdm(range(train_len[0], train_len[1]-seq_len)):
             opt_gcn.zero_grad()
             opt_cls.zero_grad()
-            x = data.feat_list[i: i+seq_len]
-            x = th.FloatTensor(x).to(device)
-            Ain = data.Ain_list[i: i+seq_len] # 目的IP-边: 入边有向图
-            Aout = data.Aout_list[i: i+seq_len] # 源IP-边: 出边有向图
-            adj = data.adj_list[i: i+seq_len] # 源IP-目的IP: 无向图
-            ips = data.ip_list[i: i+seq_len] # 节点集
-
-            cur_ips = data.ip_list[i+seq_len-1] # 当前时刻的图
-            cur_A=data.A_list[i+seq_len-1] # 归一化前的IP邻接矩阵（当前时刻）
-            
-            node_feats = model(x, Ain, Aout, adj, ips, cur_ips)
-            edge_embs, labels, _ = get_edge_embs(node_feats, cur_A, abalation=True) # 边的正负采样
+            labels, edge_embs, pos_edges=model_forward(data, i, seq_len, device, model, abalation=True)
             pred= cls(edge_embs) # 基于分类器计算边的异常分数
             loss = loss_gcn(pred, torch.LongTensor(labels).to(device=device))
+
             loss.backward()
             gcn_loss+=loss.item()
             opt_gcn.step()
@@ -60,7 +73,9 @@ def train_gcn_lstm5(args, data, epochs, train_len):
 
     return losses
 
-def predict5(args,data):
+
+
+def predict5(args, data):
 
     device = args.device
     model = DGCN3(args).to(device)
@@ -76,16 +91,9 @@ def predict5(args,data):
     graph_embs=[]
     data.feat_list=torch.FloatTensor(data.feat_list).to(device)
     for i in tqdm(range(len(data.feat_list)-seq_len)):
-        x = data.feat_list[i: i+seq_len]
-        A_in = data.Ain_list[i: i+seq_len]
-        A_out=data.Aout_list[i: i+seq_len]
-        adj = data.adj_list[i: i+seq_len]
-        ips = data.ip_list[i: i+seq_len]
-        cur_ips = data.ip_list[i]
-        cur_A=data.A_list[i]
-        output = model(x, A_in, A_out, adj, ips,cur_ips)
-        edge_embs, labels, pos_edges = get_edge_embs(output, cur_A)
-        pred=cls(pos_edges)
+        labels, pred, pos_edges=model_forward(data,  i, seq_len, device, model, abalation=False)
+        pred= cls(pos_edges) # 基于分类器计算边的异常分数
+         
         pred = softmax(pred,0)
         pos_edges=pos_edges*pred[:,0].unsqueeze(1)
         graph_embs.append(pos_edges.sum(0)) # 图的嵌入向量=边嵌入向量*边异常概率

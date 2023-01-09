@@ -51,7 +51,7 @@ def matrix(true_graph_labels,scores):
 if __name__ =='__main__':
     args=parse()
     seq_len=0
-    train_len=[0, 4600] #cic[0,529], unsw[200:600], ustc[10:100], cic2018[0, 4600]
+    train_len=[0, 4600] #cic2017[0,529], unsw[200:600], ustc[10:100], cic2018[0, 4600]
     data_embs = torch.load(args.embs_path).detach().cpu().numpy()
     labels = np.load(args.labels_path, allow_pickle=True)
     labels=labels[seq_len:]

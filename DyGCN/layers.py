@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
 from torch.nn.utils.rnn import pad_sequence
-
+import torch.nn.functional as F
 
 # 衰减的时序聚合 
 class GraphConvolution3(Module):
@@ -114,20 +114,15 @@ class GraphConvolution2(Module):
 
 # 原始GCN层
 class GraphConvolution(Module):
-    """
-    Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
-    """
 
-    def __init__(self, in_features, out_features, bias=True, type=None):
+    def __init__(self, in_features, out_features, type=None):
         super(GraphConvolution, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = Parameter(torch.FloatTensor(in_features, out_features))
+        self.weight = Parameter(torch.FloatTensor(in_features, 32))
+        self.weight2=Parameter(torch.FloatTensor(32, out_features))
+        self.layernorm= nn.LayerNorm(out_features)
         self.type=type
-        if bias:
-            self.bias = Parameter(torch.FloatTensor(out_features))
-        else:
-            self.register_parameter('bias', None)
         self.reset_parameters()
 
 
@@ -135,16 +130,18 @@ class GraphConvolution(Module):
         '''为了让每次训练产生的初始参数尽可能相同，从而便于实验结果的复现，可以设置固定的随机数生成种子'''
         stdv = 1. / math.sqrt(self.weight.size(1))
         self.weight.data.uniform_(-stdv, stdv)
-        if self.bias is not None:
-            self.bias.data.uniform_(-stdv, stdv)
+        stdv = 1. / math.sqrt(self.weight2.size(1))
+        self.weight2.data.uniform_(-stdv, stdv)
+
 
     def forward(self, input, adj):
         support = torch.mm(input, self.weight)
         output = torch.spmm(adj.to(support.device), support) #聚合邻居特征
-        if self.bias is not None:
-            return output + self.bias
-        else:
-            return output
+        output=F.relu(output)
+        output=torch.mm(output, self.weight2)
+        output=self.layernorm(output)
+        output=F.relu(output)
+        return output
 
     def __repr__(self):
         '''该方法是类的实例化对象用来做“自我介绍”的方法，默认情况下会返回当前对象的“类名+object at+内存地址”'''
