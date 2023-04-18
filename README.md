@@ -8,6 +8,8 @@ CSE-CIC-IDS 2018: https://www.unb.ca/cic/datasets/ids-2018.html
 
 动态图模型的作用在于进行子图嵌入，子图嵌入的结果可以用异常检测模型进行异常判断。
 
+其他对比模型的代码在`/compare_models`目录下
+
 ## 模型训练
 基于cic2017数据集进行模型训练
 
