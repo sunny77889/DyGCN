@@ -1,4 +1,5 @@
 # 基于动态图神经网络的异常流量检测方法DyGCN
+论文成果：DyGCN.pdf
 ## 实验数据集
 CIC-IDS 2017：https://www.unb.ca/cic/datasets/ids-2017.html 
 
